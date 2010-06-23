@@ -1,4 +1,4 @@
-/* To produce proper traces use the following Unix command and opts :   strace -tt -e trace=open,close,read,write -o trace.txt ./Driver [args] */ 
+/* To produce proper traces use the following Unix command and opts :   strace -tt -e trace=open -o trace.txt ./Driver [args] */ 
 
 #include <iomanip>
 #include <stdlib.h>
@@ -6,10 +6,16 @@
 #include <stdio.h>
 #include <algorithm>
 #include <vector>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+
 #include "Driver.h"
 #include "FS_Simulator.h"
 #include "Cache_Manager.h"
 #include "Probability_Graph.h"
+
 
 #define MAX_TRACE_CALLS 10000
 
@@ -93,40 +99,31 @@ void TraceLoader::parse(string traceData)
 		
 		/* with these fields create our struct */		
 		SystemCall *newCall = new SystemCall;
-		newCall->callType = callFields[3]; 
+		newCall->callType = callFields[4]; 
 		/* make sure it is not the quit call that we add */
-		if( callFields[3] == "+++" || callFields[3] == "---")
+		if( callFields[4] == "+++" || callFields[4] == "---")
 			continue;
-		if( newCall->callType == "open")
-		{
-			newCall->file = callFields[4];
-			newCall->streamID = atoi( callFields[ callFields.size() - 1].c_str() );
-			newCall->bytes = 1;
-		}
-		if( newCall->callType == "write")
-		{
-			newCall->file = "n/a";
-			newCall->streamID = atoi ( callFields[4].c_str() );
-			newCall->bytes = atol ( callFields[ callFields.size() - 1].c_str() );
-		}
-		if( newCall->callType == "read")
-		{
-			newCall->file = "n/a";
-			newCall->streamID = atoi ( callFields[4].c_str() );
-			newCall->bytes = atol ( callFields[ callFields.size() - 1].c_str() );
-		}
-		if( newCall->callType == "close")
-		{
-			newCall->file = "n/a";
-			newCall->streamID = atoi ( callFields[4].c_str() );
-			newCall->bytes = 0;
-		}	
-		newCall->hourTime = atoi( callFields[0].c_str() );
-		newCall->minuteTime = atoi( callFields[1].c_str() );
+		newCall->file = callFields[5];
+		newCall->streamID = atoi( callFields[ callFields.size() - 1].c_str() );
+
+		/* get total size in bytes bytes and inode number */
+		int open_stat, f_stat;
+		open_stat = open( newCall->file.c_str(), O_RDONLY);
+		struct stat buff;
+		if(open_stat >= -1)
+			f_stat = fstat(open_stat, &buff);
+		
+		if(f_stat >= 0)
+			newCall->bytes = buff.st_size;
+		else
+			newCall->bytes = 512;
+
+		newCall->hourTime = atoi( callFields[1].c_str() );
+		newCall->minuteTime = atoi( callFields[2].c_str() );
 		/* break up the seconds and the milliseconds */
-		int index = callFields[2].find_first_of(".");
-		newCall->secondTime = atoi( callFields[2].substr(0, index).c_str() );
-		newCall->microSecondTime = atoi ( callFields[2].substr( index + 1, callFields[2].length() ).c_str() );
+		int index = callFields[3].find_first_of(".");
+		newCall->secondTime = atoi( callFields[3].substr(0, index).c_str() );
+		newCall->microSecondTime = atoi ( callFields[3].substr( index + 1, callFields[3].length() ).c_str() );
 		
 		calls.insert(newCall);		 
 	}	

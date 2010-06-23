@@ -21,6 +21,10 @@ struct SystemCall{
   long   microSecondTime;
   long   bytes;
 
+  /* used to calculate locality of reference */
+  double access_latency;
+  double stability;
+
   /* overloaded = operator */
   const SystemCall& operator=(const SystemCall &rhs)
 	{

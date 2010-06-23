@@ -48,9 +48,10 @@ bool FS_Simulator::sendRequest(SystemCall *request)
 {
 	/* send the request to the cache manager to prefetch/cache/or deny request */
 	bool result = cache_manager->allocate(request);
-
+	/* display the contents of the buffers */
 	cache_manager->cacheToString();
-	cout << endl << endl;
+	cout << "Request byte size : " << request->bytes << endl;
+	cout << endl << "Number of nodes: " << graph->nodes.size() << endl;
 	return result;
 }
 
