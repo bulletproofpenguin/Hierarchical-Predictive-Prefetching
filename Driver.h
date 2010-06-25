@@ -17,7 +17,7 @@ struct SystemCall{
   string file;
   short  hourTime;
   short  minuteTime;
-  short  secondTime;
+  int  secondTime;
   long   microSecondTime;
   long   bytes;
 
@@ -129,6 +129,8 @@ class TraceLoader
 	string getData();
 	/* function to parse the trace data to create SystemCall structs */
 	void parse(string);
+	
+	void parse_seers(string);
 	
 	
 };

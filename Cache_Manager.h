@@ -37,21 +37,22 @@
 
 /* conigurable delay variables */
 
-#define t_disk 10000 // storage disk/drive latency
-#define t_cpu  1000 // inter-access CPU time of application ( 1000 system calls per second average )
+#define t_disk 1000 // storage disk/drive latency
+#define t_cpu  100 // inter-access CPU time of application ( 1000 system calls per second average )
 #define t_hit  50 // time to read a several kilobytes from cache
 #define t_driver 500 // time to allocate new pages ???????????????????????????
 
 /* formulas for cost/benefit analysis in microseconds */
 
 #define prefetch_horizon (t_disk/(t_cpu + t_hit + t_driver) ) // number of simultaneous prefetches to pipeline
-#define prefetch_ttl (t_disk - prefetch_horizon*(t_cpu + t_hit + t_driver) + prefetch_horizon)*(t_cpu + t_hit + t_driver)  //in microseconds 
+#define prefetch_ttl t_disk + t_cpu  //in microseconds 
 
 
 /* Tunable variables for Weigted Moving Averages */
 
 #define gamma 0.25 // for the weighted moving cache and prefetch hit ratio
 
+using namespace std;
 
 
 /* global variables */
@@ -77,6 +78,10 @@ struct Timestamp
        	        gettimeofday(&now, 0);
 		/* seconds since Jan 1970 */
 		time =  now.tv_sec + (now.tv_usec*.000001);	
+	}
+	void prefetchStamp()
+	{
+		time = time - (double)t_disk*0.000001;
 	}
 };
 
@@ -143,12 +148,15 @@ struct Cache
 	}
 
 	/* insert a page into the buffer */
-	bool insert ( Page page )
+	pair<bool, Page> insert ( Page page )
 	{
+		pair<bool, Page> return_val;
 		/* insert the page into the cache */
 		pair< set<Page>::iterator, bool> result;
 		result = buffer.insert(page);
-		return result.second;
+		return_val.first = result.second;
+		return_val.second = *result.first;
+		return return_val;
 	}	
 	/* get the weighted cache hit ratio */
 	double update_hit_ratio()
@@ -192,12 +200,15 @@ struct Prefetch
 		
 	}
 	/* insert a page into the buffer */
-	bool insert ( Page page )
+	pair<bool, Page> insert ( Page page )
 	{
+		pair<bool, Page> return_val;
 		/* insert the page into the cache */
 		pair< set<Page>::iterator, bool> result;
 		result = buffer.insert(page);
-		return result.second;
+		return_val.first = result.second;
+		return_val.second = *result.first;
+		return return_val;
 	}	
 
 	/* get the weighted cache hit ratio */
@@ -346,7 +357,7 @@ class Cache_Manager
 	Cache_Manager();
 	/* allocate memory to a file */
 	bool allocate(SystemCall*); 
-	bool lruAllocate( SystemCall*);
+	bool lruAllocate( SystemCall*, bool);
 	bool prefetchAllocate(Page);
 	/* print cache to screen */
 	void cacheToString();
@@ -438,7 +449,7 @@ bool Cache_Manager::allocate( SystemCall *file)
 	/* LRU Management */
 	if( !prefetching )
 	{
-		return lruAllocate( file );
+		return lruAllocate( file, false );
 	}
 	/* LRU with prefetching */
 	else
@@ -447,57 +458,82 @@ bool Cache_Manager::allocate( SystemCall *file)
 		call_window.insert( file );
 		/* prefetch calls that are in the lookahead window */
 		prefetch( file );
-		/* put the file into the cache because it has been called */		
-		lruAllocate( file );
+		
 					
 		/* delete all blocks with this file name from the prefetch buffer */
 		bool found = false;
+		bool isLoaded = false;
+		bool isPrefetched = false;
+		Timestamp now;
+		now.stamp();
 		for( set<Page>::iterator it = prefetched.buffer.begin(); it != prefetched.buffer.end(); it++)
 		{
-			if( *file ==  *(*it).file )
+			if( *file ==  *(*it).file)
 			{
 				prefetched.buffer.erase(it);
 				prefetched.pages_available++;
 				found = true;
+
+				if( (now.time - (*it).timestamp.time) >= (double)t_disk*0.000001 )
+					isLoaded = true;
+
 			}
 			/* this works because all the cached blocks for a file are sequential */
 			if( found && !(*file ==  *(*it).file)  )
 				break;
-		}				
+		}
+		if( found && isLoaded )
+		{
+			prefetched.hit_count += ceil(file->bytes/BLOCK_SIZE);
+			isPrefetched = true;
+		}
+		else
+			prefetched.miss_count += ceil(file->bytes/BLOCK_SIZE);
+			
+		
+		/* put the file into the cache because it has been called */		
+		lruAllocate( file, isPrefetched );
+						
 	} 
 
 }
-/* Precondition : th/e SystemCall is not in the Cache buffer */
-bool Cache_Manager::lruAllocate( SystemCall *file )
+/* Precondition : the SystemCall is not in the Cache buffer */
+bool Cache_Manager::lruAllocate( SystemCall *file, bool isPrefetched )
 {
 	
 	/* get the number of pages required by the file */
 	long pages_required =  ceil( ((double)(file->bytes)/ BLOCK_SIZE) );
 	/* result of insert operation */
-	bool result;
+	pair<bool, Page> result;
+	
 	/* NOT ENOUGH MEMORY */
 	if( pages_required > cache.pages_available )
 	{
 		/* employ LRU management */
 		for( int i = 0; i < pages_required; i++ )
 		{
+			Timestamp now;
+			now.stamp();
 			/* create our fake page to be inserted at the tail of the set */
 			Page new_page;
 			new_page.file = file;
-			new_page.timestamp.stamp();
+			if( !isPrefetched )
+				new_page.timestamp.stamp();
+			else
+				new_page.timestamp.prefetchStamp();
 			new_page.block_num = i+1;
+			
 			/* insert a page into free cache memory ( at the tail ) */
 			if( cache.pages_available )
 			{
 				result = cache.insert( new_page ); // unless it already exists
-				if( !result )
+				if( !result.first && (now.time - result.second.timestamp.time ) >= (double)t_disk*0.000001)
 					cache.hit_count++;
 				else
-				{
 					cache.miss_count++;
-					cache.pages_available--;
-				}		
+				cache.pages_available = cache.capacity - cache.buffer.size();		
 			}
+			
 			/* deallocated memory at the head of the set and add a page */
 			else
 			{
@@ -508,26 +544,27 @@ bool Cache_Manager::lruAllocate( SystemCall *file )
 					cache.buffer.erase( it );
 					/* insert a page */
 					result = cache.insert( new_page );
-					if( !result )
+					/* make sure t_disk time has elapsed before it appears in the buffer */
+					if( !result.first && (now.time - result.second.timestamp.time ) >= (double)t_disk*0.000001 )
 					{
+						
 						cache.hit_count++;
-						cache.pages_available++;
 					}
 					else
 						cache.miss_count++;
+					cache.pages_available = cache.capacity - cache.buffer.size();
 				}
 				else
 				{
 					repartitionBuffers();
 					if( cache.pages_available ) {
 						result = cache.insert( new_page );
-						if( !result )
+						/* make sure t_disk time has elapsed */
+						if( !result.first && (now.time - result.second.timestamp.time ) >= (double)t_disk*0.000001 )
 							cache.hit_count++;
 						else
-						{
 							cache.miss_count++;
-							cache.pages_available--;
-						}
+						cache.pages_available = cache.capacity - cache.buffer.size();
 					}		
 				}
 					
@@ -540,20 +577,24 @@ bool Cache_Manager::lruAllocate( SystemCall *file )
 	{
 		for( int i = 0; i < pages_required; i++ )
 		{
+			Timestamp now;
+			now.stamp();
 			/* create a fake page to be inserted with a timestamp */
 			Page new_page;
-			new_page.timestamp.stamp();
+			if( !isPrefetched )
+				new_page.timestamp.stamp();
+			else
+				new_page.timestamp.prefetchStamp();
 			new_page.block_num = i+1;
 			/* make the file pointer point at the system call in the parameter of this function */
 			new_page.file = file;
 			result = cache.insert( new_page );
-			if(!result)
+			/* make sure t_disk time has elapsed */
+			if(!result.first && (now.time - result.second.timestamp.time ) >= (double)t_disk*0.000001)
 				cache.hit_count++;
 			else
-			{
 				cache.miss_count++;
-				cache.pages_available--;
-			}
+			cache.pages_available = cache.capacity - cache.buffer.size();
 		}
 		return true;
 	}
@@ -563,7 +604,7 @@ bool Cache_Manager::lruAllocate( SystemCall *file )
 bool Cache_Manager::prefetchAllocate( Page page)
 {
 	/* result of insert operation */
-	bool result;
+	pair<bool, Page> result;
 	if( !cache.isCached( page ) )
 	{
 		/* not a cache miss because we are prefetching */
@@ -572,13 +613,7 @@ bool Cache_Manager::prefetchAllocate( Page page)
 		if( prefetched.pages_available )
 		{
 			result = prefetched.insert( page );
-			if( result )
-			{
-				prefetched.miss_count++;
-				prefetched.pages_available--;
-			}
-			else
-				prefetched.hit_count++;
+			prefetched.pages_available = prefetched.capacity - prefetched.buffer.size(); 
 		}
 		else
 		{
@@ -591,31 +626,19 @@ bool Cache_Manager::prefetchAllocate( Page page)
 			/* if the prefetch time has expired, eject the prefetch */
 			if( (time_elapsed)*1000000 > prefetch_ttl && prefetched.buffer.size() > 0)
 			{
-				cout << endl << " ...PTTL expired...lru prefetch ejected ... " << endl;
 				prefetched.buffer.erase( it );
 				/* insert a page - NO NEED TO CHANGE PAGES_AVAILABLE*/
 				result = prefetched.insert( page );
-				if( !result )
-				{
-					prefetched.hit_count++;
-					prefetched.pages_available++;
-				}
-				else
-					prefetched.miss_count++;
+				prefetched.pages_available = prefetched.capacity - prefetched.buffer.size();
 			}
+			
 			/* use LRU management */
 			else
 			{
 				repartitionBuffers();
 				if( prefetched.pages_available ) {
 					result = prefetched.insert( page);
-					if( !result )	
-						prefetched.hit_count++;
-					else
-					{
-						prefetched.miss_count++;
-						prefetched.pages_available--;
-					}
+					prefetched.pages_available = prefetched.capacity - prefetched.buffer.size();
 				}
 
 			}
@@ -794,7 +817,6 @@ void Cache_Manager::repartitionBuffers()
 	double Delta = prefetched.get_current_hit_ratio() - prefetched.get_last_hit_ratio();
 	double Theta = cache.get_current_hit_ratio() - cache.get_last_hit_ratio();
 				
-	/* used the table in the paper */
 
 	/* Theta and Delta are not moving significantly -> reset to optimal values */
 	if ( Delta > -DOUBLE_ZERO && Delta < DOUBLE_ZERO && Theta > -DOUBLE_ZERO && Theta < DOUBLE_ZERO) {
@@ -843,7 +865,9 @@ void Cache_Manager::repartitionBuffers()
 			}
 			cache.capacity++;
 			cache.pages_available++;
-		}				
+		}
+		if( minimum_chance  < 0.9)
+			minimum_chance += 0.1;				
 	}
 	else if( Delta > Theta ) {
 		if( prefetched.capacity <= (0.1)*(total_pages) )
@@ -857,41 +881,18 @@ void Cache_Manager::repartitionBuffers()
 				set<Page>::iterator iter = cache.buffer.begin();
 				cache.buffer.erase( iter );
 			}
-		}		
+		}	
+		if( minimum_chance  > 0.3)
+			minimum_chance -= 0.1;		
 
-	}
-	/*
-	else if( Delta < DOUBLE_ZERO && Delta > -DOUBLE_ZERO && Theta < DOUBLE_ZERO )  {
-		if( prefetched.capacity > 0  && prefetched.capacity > prefetch_horizon)
-		{
-			prefetched.capacity--;
-			if ( prefetched.pages_available )
-				prefetched.pages_available--;
-			else {
-				set<Page>::iterator iter = prefetched.buffer.begin();
-				prefetched.buffer.erase( iter );
-			}
-			cache.capacity++;
-			cache.pages_available++;
-		}				
-	}
-	else if( Delta > DOUBLE_ZERO && Theta < DOUBLE_ZERO ) {
-		if( prefetched.capacity <= (0.1)*(total_pages) )
-		{
-			prefetched.capacity++;
-			prefetched.pages_available++;
-			cache.capacity--;
-			if( cache.pages_available )
-				cache.pages_available--;
-			else {
-				set<Page>::iterator iter = cache.buffer.begin();
-				cache.buffer.erase( iter );
-			}
-		}		
-
-	}
-	/*	
+	}	
 	/* ELSE DO NOTHING  */
+	
+	if( Delta > 0 && minimum_chance < 0.9)
+		minimum_chance +=0.1;
+	else if( Delta < 0 && minimum_chance > 0.3 )
+		minimum_chance -=0.1;
+	
 }
 
 

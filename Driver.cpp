@@ -129,6 +129,68 @@ void TraceLoader::parse(string traceData)
 	}	
 }
 
+/* load System Calls into calls set */
+void TraceLoader::parse_seers(string traceData)
+{
+	/* break down the long string into single lines using a tokenizer */
+	char * pch;
+	pch = strtok ((char *)traceData.c_str(), "\r\n");
+
+	/* create a string vector to hold each line in the trace */
+	vector<string> sysCalls;
+
+	while( pch != NULL)
+	{
+		sysCalls.push_back(&pch[0]);
+		pch = strtok (NULL, "\r\n");
+	}
+
+	/* use this data to build our SystemCall struct Array */
+	for( int i = 0; i < sysCalls.size(); i++)
+	{
+		string currLine = sysCalls.at(i);
+		pch = strtok ((char *)currLine.c_str(), "=:, ()\"");
+		
+		vector<string> callFields;
+		while( pch != NULL )
+		{
+			callFields.push_back( &pch[0] );
+			pch = strtok (NULL, "=:, ()\"");
+		}
+		
+		/* with these fields create our struct */		
+		SystemCall *newCall = new SystemCall;
+		newCall->callType = callFields[8]; 
+		/* make sure it is not the quit call that we add */
+		if( callFields[8] == "+++" || callFields[8] == "---")
+			continue;
+		newCall->file = callFields[9];
+		newCall->streamID = atoi( callFields[ callFields.size() - 1].c_str() );
+
+		/* get total size in bytes bytes and inode number */
+		newCall->bytes = atoi( callFields[11].c_str());
+		if( newCall->bytes == 0)
+			newCall->bytes = 512;
+
+		/* seconds and microseconds */
+		int index = callFields[7].find_first_of(".");
+		long first_part = atol( callFields[7].substr(0, index).c_str() );
+		newCall->microSecondTime = atoi ( callFields[7].substr( index + 1, callFields[7].length() ).c_str() );
+		
+		int hours = first_part/3600;
+		first_part -= hours*3600;
+
+		int minutes = first_part/60;
+		first_part -= minutes*60;
+
+		newCall->hourTime = hours%24;
+		newCall->minuteTime = minutes%60;
+		newCall->secondTime = first_part;
+				
+		calls.insert(newCall);		 
+	}	
+}
+
 int main( int argc, char *argv[])
 {
 	/* parse the command line args */
@@ -140,7 +202,7 @@ int main( int argc, char *argv[])
 	
 	TraceLoader loader( argv[5] );
 	string data = loader.getData();
-	loader.parse(data);
+	loader.parse_seers(data);
 	cout << "Driver.cpp : data parsed... " << endl;
 	string prefetch_arg = argv[6];
 	
@@ -164,13 +226,23 @@ int main( int argc, char *argv[])
 	/* use TraceLoader to load our simulation data */
 	TraceLoader test( argv[1] );
 	data = test.getData();
-	test.parse(data); // produces a set of SystemCalls ordered by time ( microseconds )
+	test.parse_seers(data); // produces a set of SystemCalls ordered by time ( microseconds )
 	cout << "Driver.cpp : test data parsed..." << endl;
 
 	/* Simulate Application system calls */
-	for( set<SystemCall*>::iterator it = test.calls.begin(); it != test.calls.end(); it++)
+	Timestamp elapsed;
+	elapsed.stamp();
+	double long now = elapsed.time;
+	set<SystemCall*>::iterator it = test.calls.begin();
+	while(it != test.calls.end() )
 	{
-		fs_sim.sendRequest( *it );
+		elapsed.stamp();
+		if( elapsed.time - now > 0.0001 )
+		{
+			fs_sim.sendRequest( *it );
+			now = elapsed.time;
+			it++;
+		}
 	}
 
 	
