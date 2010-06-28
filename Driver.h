@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <string>
+#include <vector>
 #include <set>
 #include <math.h>
 #include <iomanip>
@@ -121,7 +122,7 @@ class TraceLoader
 	private:
 	string traceFile;
 	public:
-	set<SystemCall*, systemCallComparison > calls;
+	vector<SystemCall*> calls;
 	/* constructors */
 	TraceLoader(string trfile)
 	{ traceFile = trfile; }
@@ -195,11 +196,4 @@ SystemCall operator+(SystemCall lhs, double addTime) // adding seconds
 	return lhs;
 	 
 }
-
-
-
-
-
-
-
 #endif

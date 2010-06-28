@@ -1,0 +1,231 @@
+Call: open
+StreamID: 3
+File: /etc/ld.so.cache
+Hour: 0
+Minute: 20
+Second: 22
+Microsecond: 661195
+Bytes: 18564
+/etc/ld.so.cache
+Updating Last Hit Ratio...
+Checking if /etc/ld.so.cache is Pipelinable...
+--------------------------
+Prefetch Capacity : 13
+Prefetch Hit Ratio : 0
+
+Prefetch Pages Available : 13
+Cache Hit Ratio : 0
+Cache Capacity : 7987
+Cache Pages Available : 7950
+Request byte size : 18564
+
+Number of nodes: 1
+Call: open
+StreamID: 3
+File: /lib/libtermcap.so.2
+Hour: 0
+Minute: 20
+Second: 22
+Microsecond: 661247
+Bytes: 15129
+/lib/libtermcap.so.2
+Updating Last Hit Ratio...
+Checking if /lib/libtermcap.so.2 is Pipelinable...
+--------------------------
+Prefetch Capacity : 13
+Prefetch Hit Ratio : 0
+
+Prefetch Pages Available : 13
+Cache Hit Ratio : 0
+Cache Capacity : 7987
+Cache Pages Available : 7920
+Request byte size : 15129
+
+Number of nodes: 2
+Call: open
+StreamID: 3
+File: /lib/libc.so.6
+Hour: 0
+Minute: 20
+Second: 22
+Microsecond: 661421
+Bytes: 4016683
+/lib/libc.so.6
+Updating Last Hit Ratio...
+Checking if /lib/libc.so.6 is Pipelinable...
+--------------------------
+Prefetch Capacity : 13
+Prefetch Hit Ratio : 0
+
+Prefetch Pages Available : 13
+Cache Hit Ratio : 0
+Cache Capacity : 7987
+Cache Pages Available : 74
+Request byte size : 4016683
+
+Number of nodes: 3
+Call: open
+StreamID: 3
+File: /etc/nsswitch.conf
+Hour: 0
+Minute: 20
+Second: 22
+Microsecond: 664256
+Bytes: 1540
+/etc/nsswitch.conf
+Updating Last Hit Ratio...
+Checking if /etc/nsswitch.conf is Pipelinable...
+--------------------------
+Prefetch Capacity : 13
+Prefetch Hit Ratio : 0
+
+Prefetch Pages Available : 13
+Cache Hit Ratio : 0
+Cache Capacity : 7987
+Cache Pages Available : 70
+Request byte size : 1540
+
+Number of nodes: 4
+Call: open
+StreamID: 3
+File: /etc/ld.so.cache
+Hour: 0
+Minute: 20
+Second: 22
+Microsecond: 664623
+Bytes: 18564
+/etc/ld.so.cache
+Updating Last Hit Ratio...
+Checking if /etc/ld.so.cache is Pipelinable...
+--------------------------
+Prefetch Capacity : 13
+Prefetch Hit Ratio : 0
+
+Prefetch Pages Available : 12
+Cache Hit Ratio : 0
+Cache Capacity : 7987
+Cache Pages Available : 33
+Request byte size : 18564
+
+Number of nodes: 4
+Call: open
+StreamID: 3
+File: /lib/libnss_files.so.2
+Hour: 0
+Minute: 20
+Second: 22
+Microsecond: 664673
+Bytes: 243964
+/lib/libnss_files.so.2
+Updating Last Hit Ratio...
+Checking if /lib/libnss_files.so.2 is Pipelinable...
+--------------------------
+Prefetch Capacity : 13
+Prefetch Hit Ratio : 0
+
+Prefetch Pages Available : 12
+Cache Hit Ratio : 0
+Cache Capacity : 7987
+Cache Pages Available : 0
+Request byte size : 243964
+
+Number of nodes: 5
+Call: open
+StreamID: 3
+File: /etc/passwd
+Hour: 0
+Minute: 20
+Second: 22
+Microsecond: 665029
+Bytes: 6513
+/etc/passwd
+Updating Last Hit Ratio...
+Checking if /etc/passwd is Pipelinable...
+--------------------------
+Prefetch Capacity : 13
+Prefetch Hit Ratio : 0
+
+Prefetch Pages Available : 12
+Cache Hit Ratio : 0
+Cache Capacity : 7987
+Cache Pages Available : 0
+Request byte size : 6513
+
+Number of nodes: 6
+Call: open
+StreamID: 3
+File: /etc/ld.so.cache
+Hour: 0
+Minute: 20
+Second: 22
+Microsecond: 665519
+Bytes: 18564
+/etc/ld.so.cache
+Updating Last Hit Ratio...
+Checking if /etc/ld.so.cache is Pipelinable...
+--------------------------
+Prefetch Capacity : 13
+Prefetch Hit Ratio : 0
+
+Prefetch Pages Available : 0
+Cache Hit Ratio : 0
+Cache Capacity : 7987
+Cache Pages Available : 0
+Request byte size : 18564
+
+Number of nodes: 6
+Call: open
+StreamID: 3
+File: /lib/libnss_nisplus.so.2
+Hour: 0
+Minute: 20
+Second: 22
+Microsecond: 665564
+Bytes: 251436
+/lib/libnss_nisplus.so.2
+Updating Last Hit Ratio...
+Checking if /lib/libnss_nisplus.so.2 is Pipelinable...
+--------------------------
+Prefetch Capacity : 13
+Prefetch Hit Ratio : 0
+
+Prefetch Pages Available : 0
+Cache Hit Ratio : 0
+Cache Capacity : 7987
+Cache Pages Available : 0
+Request byte size : 251436
+
+Number of nodes: 7
+Call: open
+StreamID: 3
+File: /lib/libnsl.so.1
+Hour: 0
+Minute: 20
+Second: 22
+Microsecond: 665690
+Bytes: 364235
+/lib/libnsl.so.1
+Updating Last Hit Ratio...
+Checking if /lib/libnsl.so.1 is Pipelinable...
+--------------------------
+Prefetch Capacity : 13
+Prefetch Hit Ratio : 0
+
+Prefetch Pages Available : 0
+Cache Hit Ratio : 0
+Cache Capacity : 7987
+Cache Pages Available : 0
+Request byte size : 364235
+
+Number of nodes: 8
+Call: open
+StreamID: 3
+File: /etc/ld.so.cache
+Hour: 0
+Minute: 20
+Second: 22
+Microsecond: 666172
+Bytes: 18564
+/etc/ld.so.cache
+Updating Last Hit Ratio...
+Checking if /etc/ld.so.cache is Pipelinable...

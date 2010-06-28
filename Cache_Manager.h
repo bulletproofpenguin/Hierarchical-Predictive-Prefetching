@@ -22,22 +22,9 @@
 /* define all times in microseconds */ 
 /* simulate a vendors hardware */
 
-#define RAM_LATENCY 0.05
-#define SSD_LATENCY 100 
-#define RAID_LATENCY 10000
-#define TAPE_LATENCY 10000000
-
-/* define bandwidth in megabytes / second */
-
-#define RAM_BITRATE 80
-#define SSD_BITRATE 50
-#define RAID_BITRATE  100
-#define TAPE_BITRATE 6 
-
-
 /* conigurable delay variables */
 
-#define t_disk 1000 // storage disk/drive latency
+#define t_disk 8900 // Samsung Serial ATA 320 gb 16mb of DRAM as a buffer ( 8.9 ms delay )
 #define t_cpu  100 // inter-access CPU time of application ( 1000 system calls per second average )
 #define t_hit  50 // time to read a several kilobytes from cache
 #define t_driver 500 // time to allocate new pages ???????????????????????????
@@ -50,7 +37,7 @@
 
 /* Tunable variables for Weigted Moving Averages */
 
-#define gamma 0.25 // for the weighted moving cache and prefetch hit ratio
+#define gamma 0.50 // for the weighted moving cache and prefetch hit ratio
 
 using namespace std;
 
@@ -59,14 +46,6 @@ using namespace std;
 int lookahead_window;
 int assoc_count;
 Probability_Graph *graph;
-
-/* represent a storage disk */
-struct Disk
-{
-	double access_delay; //microseconds
-	double locality_min;
-	double locality_max;
-};
 
 
 struct Timestamp
@@ -337,7 +316,7 @@ class Cache_Manager
 	private:
 	
 	/* general variables */
-	Timestamp last_clock_time;
+	Timestamp clock_one, clock_two;
 
 	/* top level storage */
 	bool prefetching;
@@ -346,13 +325,10 @@ class Cache_Manager
 	Cache cache;
 	Prefetch prefetched;
 	CallWindow call_window;
-
-	/* rest of the storage */
-	Disk disk_stack[4];	
-
+	
 	public:
 	/* constructor - param: true -> prefetching / false -> no prefetching */
-	Cache_Manager(string, bool, long, double, int);
+	Cache_Manager(bool, long, double, int);
 	/* default constructor */
 	Cache_Manager();
 	/* allocate memory to a file */
@@ -381,7 +357,7 @@ Cache_Manager::Cache_Manager()
 	prefetching = false;
 }
 
-Cache_Manager::Cache_Manager(string trace_file, bool tmp, long size_in_bytes, double minChance, int lookahead)
+Cache_Manager::Cache_Manager(bool tmp, long size_in_bytes, double minChance, int lookahead)
 {
 	/* initialize parameters */
 	prefetching  = tmp;
@@ -397,18 +373,12 @@ Cache_Manager::Cache_Manager(string trace_file, bool tmp, long size_in_bytes, do
 	prefetched.last_hit_ratio = 0;
 	assoc_count = 0;
 
-	/* initialize clock */
-	last_clock_time.stamp();	
-
-	/* load our trace data */
-	TraceLoader traceLoader(trace_file);
-	string data = traceLoader.getData();
-	traceLoader.parse(data); // fill calls set
+	/* initialize clocks */
+	clock_one.stamp();
+	clock_two.stamp();	
 
 	/* load our probability graph */
-	graph = new Probability_Graph(traceLoader.calls, lookahead_window);
-	graph->createNodes();
-	graph->loadAssociations();
+	graph = new Probability_Graph(lookahead_window);
 
 	total_pages = size_in_bytes/BLOCK_SIZE;	
 	/* initialize buffers */
@@ -421,20 +391,9 @@ Cache_Manager::Cache_Manager(string trace_file, bool tmp, long size_in_bytes, do
 	else {
 		cache.capacity = total_pages;
 		cache.pages_available = cache.capacity;
+		prefetched.pages_available = 0;
 	}
 
-	/* initialize disks */
-	Disk RAM;
-	RAM.access_delay = RAM_LATENCY;
-
-	Disk SSD;
-	SSD.access_delay = SSD_LATENCY;
-
-	Disk RAID;
-	RAID.access_delay = RAID_LATENCY;
-	
-	Disk TAPE;
-	TAPE.access_delay = TAPE_LATENCY;
 }
 
 
@@ -529,9 +488,12 @@ bool Cache_Manager::lruAllocate( SystemCall *file, bool isPrefetched )
 				result = cache.insert( new_page ); // unless it already exists
 				if( !result.first && (now.time - result.second.timestamp.time ) >= (double)t_disk*0.000001)
 					cache.hit_count++;
-				else
+				else if( !result.first )
 					cache.miss_count++;
-				cache.pages_available = cache.capacity - cache.buffer.size();		
+				else {
+					cache.miss_count++;
+					cache.pages_available--;
+				}		
 			}
 			
 			/* deallocated memory at the head of the set and add a page */
@@ -545,26 +507,31 @@ bool Cache_Manager::lruAllocate( SystemCall *file, bool isPrefetched )
 					/* insert a page */
 					result = cache.insert( new_page );
 					/* make sure t_disk time has elapsed before it appears in the buffer */
-					if( !result.first && (now.time - result.second.timestamp.time ) >= (double)t_disk*0.000001 )
-					{
-						
+					if( !result.first && (now.time - result.second.timestamp.time ) >= (double)t_disk*0.000001 ) {
 						cache.hit_count++;
+						cache.pages_available++;
 					}
-					else
+					else if( !result.first )  // no need to do decrease pages available
 						cache.miss_count++;
-					cache.pages_available = cache.capacity - cache.buffer.size();
+					else 
+						cache.miss_count++;
 				}
 				else
 				{
+					
 					repartitionBuffers();
+					
 					if( cache.pages_available ) {
 						result = cache.insert( new_page );
 						/* make sure t_disk time has elapsed */
 						if( !result.first && (now.time - result.second.timestamp.time ) >= (double)t_disk*0.000001 )
 							cache.hit_count++;
-						else
+						else if( !result.first ) 
 							cache.miss_count++;
-						cache.pages_available = cache.capacity - cache.buffer.size();
+						else {
+							cache.pages_available--;
+							cache.miss_count++;
+						}
 					}		
 				}
 					
@@ -592,9 +559,12 @@ bool Cache_Manager::lruAllocate( SystemCall *file, bool isPrefetched )
 			/* make sure t_disk time has elapsed */
 			if(!result.first && (now.time - result.second.timestamp.time ) >= (double)t_disk*0.000001)
 				cache.hit_count++;
-			else
+			else if( !result.first )
 				cache.miss_count++;
-			cache.pages_available = cache.capacity - cache.buffer.size();
+			else {
+				cache.pages_available--;
+				cache.miss_count++;
+			}
 		}
 		return true;
 	}
@@ -638,6 +608,13 @@ bool Cache_Manager::prefetchAllocate( Page page)
 				repartitionBuffers();
 				if( prefetched.pages_available ) {
 					result = prefetched.insert( page);
+					prefetched.pages_available = prefetched.capacity - prefetched.buffer.size();
+				}
+				else
+				{
+					set<Page>::iterator it  = prefetched.buffer.begin();
+					prefetched.buffer.erase(it);
+					result = prefetched.insert(page);
 					prefetched.pages_available = prefetched.capacity - prefetched.buffer.size();
 				}
 
@@ -690,12 +667,39 @@ void Cache_Manager::updateHitRatios()
 	/* update the hit ratios every 100 microseconds */
 	Timestamp now;
 	now.stamp(); 
-	if(  now.time - last_clock_time.time > 0.0001  )
+	if(  now.time - clock_one.time > 0.0001  )
 	{
 		cache.update_hit_ratio();
 		prefetched.update_hit_ratio();
+		clock_one.stamp();
 	}
-	last_clock_time.stamp();	
+
+	/* get data to create a graph every half a second */
+	if(  now.time - clock_two.time > 0.05  )
+	{
+		Timestamp current_time;
+		current_time.stamp();
+		/* get rid of hours and minutes */
+		int hours = current_time.time/3600;
+		current_time.time -= hours*3600;
+		int minutes = current_time.time/60;
+		current_time.time -= minutes*60;
+		ofstream fout;
+		fout.open( "graph_data.txt", ios_base::app );
+		fout << prefetched.get_current_hit_ratio();
+		fout << "\t";
+		fout << prefetched.capacity;
+		fout << "\t";
+		fout << cache.get_current_hit_ratio();
+		fout << "\t";
+		fout << cache.capacity;
+		fout << "\t";
+		fout << current_time.time << endl;
+		fout.close();
+		clock_two.stamp();
+	}
+
+		
 }
 
 
@@ -895,37 +899,19 @@ void Cache_Manager::repartitionBuffers()
 	
 }
 
-
 void Cache_Manager::cacheToString()
 {
-	set<Page>::iterator it;
-	//cout << "---------- Cache Buffer ---------- " << endl;
-	//for( it = cache.buffer.begin(); it != cache.buffer.end(); it++)
-	//{
-		//cout << "Accessed : " << setprecision(18) <<(*it).timestamp.time << endl;
-		//cout << "File : " << (*(*it).file).file << endl << endl;
-	//} 
 	cout << "--------------------------" << endl;
-	cout << "Cache Hit Ratio : " << setprecision(15) <<cache.get_current_hit_ratio() << endl;
+	cout << "Prefetch Capacity : " << prefetched.capacity << endl;
 	cout << "Prefetch Hit Ratio : " << setprecision(15) <<prefetched.get_current_hit_ratio() << endl << endl;
+	cout << "Prefetch Pages Available : " << prefetched.pages_available << endl;
+	cout << "Minimum Chance : " << minimum_chance << endl;
+	
 	//cout << "---------- Prefetch Buffer ---------- " << endl;
+	cout << "Cache Hit Ratio : " << setprecision(15) <<cache.get_current_hit_ratio() << endl;
 	 cout << "Cache Capacity : " << cache.capacity << endl;
 	 cout << "Cache Pages Available : " << cache.pages_available << endl;
 	 //cout << "Prefetch Capacity : " << prefetched.capacity << endl; // in pages
-
-	
-	 double Delta = prefetched.get_current_hit_ratio() - prefetched.get_last_hit_ratio();
-	 double Theta = cache.get_current_hit_ratio() - cache.get_last_hit_ratio();
-	
-	//cout << "Theta : " << setprecision(15) << Theta << endl;
-	//cout << "Delta : " << setprecision(15) << Delta << endl;
-
-	//cout << "Prefetch Pages Available: " << prefetched.pages_available <<endl;
-	//for( it = prefetched.buffer.begin(); it != prefetched.buffer.end(); it++)
-	//{
-		//cout << "Prefetched : " << setprecision(18) <<(*it).timestamp.time << endl;
-		//cout << "File : " << (*(*it).file).file << endl << endl;
-	//} 
 }
 
 #endif

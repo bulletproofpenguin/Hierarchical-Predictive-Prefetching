@@ -125,7 +125,7 @@ void TraceLoader::parse(string traceData)
 		newCall->secondTime = atoi( callFields[3].substr(0, index).c_str() );
 		newCall->microSecondTime = atoi ( callFields[3].substr( index + 1, callFields[3].length() ).c_str() );
 		
-		calls.insert(newCall);		 
+		calls.push_back(newCall);		 
 	}	
 }
 
@@ -186,25 +186,24 @@ void TraceLoader::parse_seers(string traceData)
 		newCall->hourTime = hours%24;
 		newCall->minuteTime = minutes%60;
 		newCall->secondTime = first_part;
-				
-		calls.insert(newCall);		 
+
+
+		/* insert this into our set graph*/				
+		calls.push_back(newCall);
+		 
 	}	
 }
 
 int main( int argc, char *argv[])
 {
 	/* parse the command line args */
-	if( argc < 6 )
+	if( argc < 5 )
 	{
-		cout << "Error: need 6 args! ./Driver [test file] [cache-size] [minimum chance] [lookahead window] [train file] [prefetch option]";
+		cout << "Error: need 6 args! ./Driver [test file] [cache-size] [minimum chance] [lookahead window] [prefetch option]";
 		return 0;
 	}
 	
-	TraceLoader loader( argv[5] );
-	string data = loader.getData();
-	loader.parse_seers(data);
-	cout << "Driver.cpp : data parsed... " << endl;
-	string prefetch_arg = argv[6];
+	string prefetch_arg = argv[5];
 	
 	/* prefetch / yes or no */
 	bool prefetch_option = false;
@@ -213,37 +212,76 @@ int main( int argc, char *argv[])
 	
 
 	/* create our Cache_Manager */
-	Cache_Manager cache_manager(argv[5], prefetch_option, atoi(argv[2]), atof(argv[3]), atoi(argv[4]) );
-	cout << "Driver.cpp : cache_manager initialized..." << endl; 
+	Cache_Manager cache_manager(prefetch_option, atoi(argv[2]), atof(argv[3]), atoi(argv[4]) );
 	Cache_Manager *ptr = &cache_manager;
 	
-
 	/* create our FS_Simulator */
 	FS_Simulator fs_sim(ptr);
-	cout << "Driver.cpp : FS_Simulator initialized..." << endl;
 	
-
 	/* use TraceLoader to load our simulation data */
 	TraceLoader test( argv[1] );
-	data = test.getData();
-	test.parse_seers(data); // produces a set of SystemCalls ordered by time ( microseconds )
-	cout << "Driver.cpp : test data parsed..." << endl;
+	string data = test.getData();
+	test.parse(data); // produces a vector of SystemCalls ordered by time ( microseconds )
 
 	/* Simulate Application system calls */
-	Timestamp elapsed;
-	elapsed.stamp();
-	double long now = elapsed.time;
-	set<SystemCall*>::iterator it = test.calls.begin();
+
+	Timestamp now;
+	now.stamp();
+	double long previous_time = now.time;
+	SystemCall* previous_call = *test.calls.begin();
+	vector<SystemCall*>::iterator it = test.calls.begin();
+	++it;
+
+
+
+	/* convert each to seconds */
+	long double previous_call_time = 3600*previous_call->hourTime; 
+	previous_call_time += 60*previous_call->minuteTime;
+	previous_call_time += previous_call->secondTime;
+	previous_call_time += (double)0.000001*(previous_call->microSecondTime);
+
+	long double current_call_time = 3600*(*it)->hourTime; 
+	current_call_time += 60*(*it)->minuteTime;
+	current_call_time += (*it)->secondTime;
+	current_call_time += (double)0.000001*((*it)->microSecondTime);
+
+	long double elapsed_goal = current_call_time - previous_call_time;
+
+	if(elapsed_goal < 0 )
+		elapsed_goal = 0.05; //seconds
+
+	if(elapsed_goal > 5)
+		elapsed_goal = 0.05; // wait one second if it is like an hour or day or minute- we dont want to wait that long
 	while(it != test.calls.end() )
 	{
-		elapsed.stamp();
-		if( elapsed.time - now > 0.0001 )
-		{
+		now.stamp();
+		if((now.time - previous_time) - elapsed_goal > -0.00001) {
+			systemCallToString( **it );
 			fs_sim.sendRequest( *it );
-			now = elapsed.time;
+			previous_call = *it;
+			previous_time = now.time;
+			previous_call_time = 0.0;
+			current_call_time = 0.0;
+			/* convert each to seconds */
+			previous_call_time += 3600*previous_call->hourTime; 
+			previous_call_time += 60*previous_call->minuteTime;
+			previous_call_time += previous_call->secondTime;
+			previous_call_time += (double)0.000001*(previous_call->microSecondTime);
 			it++;
-		}
-	}
+			current_call_time += 3600*(*it)->hourTime; 
+			current_call_time += 60*(*it)->minuteTime;
+			current_call_time += (*it)->secondTime;
+			current_call_time += (double)0.000001*((*it)->microSecondTime);
+
+			elapsed_goal = current_call_time - previous_call_time;
+
+			if(elapsed_goal < 0 )
+				elapsed_goal = 0.05; //seconds
+
+			if(elapsed_goal > 0.05)
+				elapsed_goal = 0.05;
+		}			
+	} // end while
 
 	
 
